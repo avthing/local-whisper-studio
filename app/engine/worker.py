@@ -2,7 +2,9 @@
 
 import argparse
 import json
+import platform
 import queue
+import shutil
 import subprocess
 import sys
 import threading
@@ -69,22 +71,21 @@ class PipelineWorker:
         while True:
             job_id = self._queue.get()
             try:
-                subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "app.engine.worker",
-                        job_id,
-                        "--data-dir",
-                        str(self.store.jobs_dir.parent),
-                        "--models-dir",
-                        str(self.models_dir),
-                        "--settings-path",
-                        str(self.settings_path),
-                    ],
-                    cwd=str(BASE_DIR),
-                    check=True,
-                )
+                cmd = [
+                    sys.executable,
+                    "-m",
+                    "app.engine.worker",
+                    job_id,
+                    "--data-dir",
+                    str(self.store.jobs_dir.parent),
+                    "--models-dir",
+                    str(self.models_dir),
+                    "--settings-path",
+                    str(self.settings_path),
+                ]
+                if platform.system() == "Darwin" and shutil.which("caffeinate"):
+                    cmd = ["caffeinate", "-i", *cmd]
+                subprocess.run(cmd, cwd=str(BASE_DIR), check=True)
             except Exception as exc:
                 try:
                     meta = self.store.get_job(job_id)

@@ -11,8 +11,8 @@ FRONTEND_DIR = BASE_DIR / "frontend"
 SETTINGS_FILE = DATA_DIR / "settings.json"
 
 DEFAULT_PROMPT = (
-    "繁體中文會議紀錄，請使用完整標點符號與台灣常用術語。"
-    "常見專有名詞：ERP、CRM、SaaS、API、AWS、GCP、GitHub、AI。"
+    "大家好，今天是繁體中文技術與營運會議，我們會討論系統架構與專案進度，"
+    "常見專有名詞包含 ERP、CRM、SaaS、API、AWS、GCP、GitHub、AI。"
 )
 
 DEFAULT_GLOSSARY: dict[str, str] = {

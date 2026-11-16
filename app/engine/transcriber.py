@@ -94,9 +94,10 @@ def run_transcription(
             language="zh",
             word_timestamps=True,
             initial_prompt=prompt or None,
-            condition_on_previous_text=True,
+            condition_on_previous_text=False,
             compression_ratio_threshold=2.2,
             no_speech_threshold=0.6,
+            hallucination_silence_threshold=2.0,
         )
 
     from faster_whisper import WhisperModel
@@ -108,7 +109,7 @@ def run_transcription(
         language="zh",
         word_timestamps=True,
         initial_prompt=prompt or None,
-        condition_on_previous_text=True,
+        condition_on_previous_text=False,
         compression_ratio_threshold=2.2,
         no_speech_threshold=0.6,
     )
