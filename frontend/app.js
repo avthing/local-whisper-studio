@@ -639,7 +639,9 @@ function openPipelineModal(mode) {
   const job = mode === "rerun" ? state.currentJob : null;
   $("pipeline-modal-title").textContent =
     mode === "rerun" ? "🔄 換模型／辨別方式重新處理此錄音" : "🎛️ 預設語音模型與語者辨別方式";
-  $("btn-apply-pipeline").textContent = mode === "rerun" ? "立即用此設定重跑" : "套用為預設上傳設定";
+  $("btn-apply-pipeline").textContent = mode === "rerun" ? "🔄 完整重跑（聲紋＋轉錄）" : "套用為預設上傳設定";
+  $("btn-rediarize-only").style.display =
+    mode === "rerun" && (job?.segments || []).length > 0 ? "inline-flex" : "none";
 
   $("cfg-asr-model").value = job?.asr_model || state.pipelineCfg.asr_model;
   $("cfg-diar-mode").value = job?.diarization_mode || state.pipelineCfg.diarization_mode;
@@ -741,13 +743,14 @@ $("cfg-diar-mode").addEventListener("change", () => {
   updateManualEta();
 });
 
-$("btn-apply-pipeline").addEventListener("click", async () => {
+async function submitPipelineAction(rediarizeOnly = false) {
   const payload = {
     asr_model: $("cfg-asr-model").value,
     diarization_mode: $("cfg-diar-mode").value,
     num_speakers: parseInt($("cfg-num-speakers").value, 10),
     enhance_audio: $("cfg-enhance-audio").checked,
     prompt: $("cfg-prompt").value,
+    rediarize_only: rediarizeOnly,
   };
   $("pipeline-modal").style.display = "none";
 
@@ -764,7 +767,10 @@ $("btn-apply-pipeline").addEventListener("click", async () => {
     state.pipelineCfg = payload;
     updatePresetBadge();
   }
-});
+}
+
+$("btn-apply-pipeline").addEventListener("click", () => submitPipelineAction(false));
+$("btn-rediarize-only").addEventListener("click", () => submitPipelineAction(true));
 
 // --- Browser Live Recorder ---
 $("btn-rec-start").addEventListener("click", async () => {

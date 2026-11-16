@@ -24,6 +24,27 @@ from app.engine.transcriber import detect_asr_backend, run_transcription
 from app.storage.jobs import JobStore
 
 
+def _load_cached_asr(job_dir: Path) -> dict | None:
+    """Load raw Whisper output with word timestamps if cached, else reuse aligned transcript segments."""
+    asr_raw = job_dir / "asr_raw.json"
+    if asr_raw.exists():
+        try:
+            data = json.loads(asr_raw.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and data.get("segments"):
+                return data
+        except Exception:
+            pass
+    transcript_path = job_dir / "transcript.json"
+    if transcript_path.exists():
+        try:
+            segs = json.loads(transcript_path.read_text(encoding="utf-8"))
+            if isinstance(segs, list) and segs:
+                return {"segments": segs}
+        except Exception:
+            pass
+    return None
+
+
 class PipelineWorker:
     """Single-threaded background queue processing audio jobs sequentially."""
 
@@ -95,9 +116,14 @@ class PipelineWorker:
             raise FileNotFoundError("Missing audio file in job directory.")
 
         enhance_audio = bool(meta.get("enhance_audio", True))
+        rediarize_only = bool(meta.get("rediarize_only", False))
         asr_model = meta.get("asr_model", DEFAULT_ASR_MODEL)
         diar_mode = meta.get("diarization_mode", DEFAULT_DIARIZATION_MODE)
         backend = detect_asr_backend()
+
+        cached_asr = _load_cached_asr(job_dir) if rediarize_only else None
+        if rediarize_only and not cached_asr:
+            rediarize_only = False
 
         self.store.update_meta(
             job_id,
@@ -113,7 +139,7 @@ class PipelineWorker:
         (job_dir / "waveform.json").unlink(missing_ok=True)
 
         est = estimate_processing_seconds(duration, asr_model, diar_mode, backend=backend)
-        est_total = est["total_sec"]
+        est_total = max(15, est["diarization_sec"] + 12) if rediarize_only else est["total_sec"]
         est_asr = max(5, est["asr_sec"])
 
         def calc_eta() -> tuple[int, int]:
@@ -163,60 +189,83 @@ class PipelineWorker:
         )
         sample_map = export_speaker_samples(wav_path, spk_segments, job_dir / "speaker_samples")
 
-        self.store.update_meta(
-            job_id,
-            stage=f"3/4 AI 語音轉錄中 ({asr_model}・0%)",
-            progress=60,
-            elapsed_sec=int(time.time() - t_start),
-            eta_remaining_sec=est_asr,
-        )
-
-        stop_heartbeat = threading.Event()
-        asr_t0 = time.time()
-
-        def on_asr_progress(pct: int) -> None:
-            overall = 60 + int(pct * 0.34)
-            asr_elapsed = time.time() - asr_t0
-            asr_rem = max(3, int(asr_elapsed * (100 - pct) / max(1, pct))) if pct > 3 else est_asr
+        if rediarize_only and cached_asr is not None:
+            asr_result = cached_asr
             self.store.update_meta(
                 job_id,
-                stage=f"3/4 AI 語音轉錄中 ({asr_model}・{pct}%)",
-                progress=overall,
+                stage="3/4 保留既有逐字稿（略過語音轉錄）...",
+                progress=88,
                 elapsed_sec=int(time.time() - t_start),
-                eta_remaining_sec=asr_rem,
+                eta_remaining_sec=3,
+            )
+        else:
+            self.store.update_meta(
+                job_id,
+                stage=f"3/4 AI 語音轉錄中 ({asr_model}・0%)",
+                progress=60,
+                elapsed_sec=int(time.time() - t_start),
+                eta_remaining_sec=est_asr,
             )
 
-        def mlx_heartbeat() -> None:
-            while not stop_heartbeat.wait(2.0):
-                asr_elapsed = time.time() - asr_t0
-                pct = min(96, int(100 * asr_elapsed / est_asr))
+            stop_heartbeat = threading.Event()
+            asr_t0 = time.time()
+
+            def on_asr_progress(pct: int) -> None:
                 overall = 60 + int(pct * 0.34)
-                asr_rem = max(5, int(est_asr - asr_elapsed))
+                asr_elapsed = time.time() - asr_t0
+                asr_rem = max(3, int(asr_elapsed * (100 - pct) / max(1, pct))) if pct > 3 else est_asr
                 self.store.update_meta(
                     job_id,
-                    stage=f"3/4 AI 語音轉錄中 ({asr_model}・約 {pct}%)",
+                    stage=f"3/4 AI 語音轉錄中 ({asr_model}・{pct}%)",
                     progress=overall,
                     elapsed_sec=int(time.time() - t_start),
                     eta_remaining_sec=asr_rem,
                 )
 
-        hb_thread = None
-        if backend == "mlx":
-            hb_thread = threading.Thread(target=mlx_heartbeat, daemon=True)
-            hb_thread.start()
+            def mlx_heartbeat() -> None:
+                while not stop_heartbeat.wait(2.0):
+                    asr_elapsed = time.time() - asr_t0
+                    if asr_elapsed >= est_asr:
+                        stage_txt = (
+                            f"3/4 AI 語音轉錄中 ({asr_model}・長段解碼收尾中・"
+                            f"已耗時 {int(asr_elapsed // 60)} 分 {int(asr_elapsed % 60):02d} 秒)"
+                        )
+                        overall = 93
+                        asr_rem = 0
+                    else:
+                        pct = min(96, int(100 * asr_elapsed / est_asr))
+                        stage_txt = f"3/4 AI 語音轉錄中 ({asr_model}・約 {pct}%)"
+                        overall = 60 + int(pct * 0.34)
+                        asr_rem = max(5, int(est_asr - asr_elapsed))
+                    self.store.update_meta(
+                        job_id,
+                        stage=stage_txt,
+                        progress=overall,
+                        elapsed_sec=int(time.time() - t_start),
+                        eta_remaining_sec=asr_rem,
+                    )
 
-        try:
-            asr_result = run_transcription(
-                wav_path,
-                model_id=asr_model,
-                prompt=meta.get("prompt", "") or settings.default_prompt,
-                total_duration=duration,
-                on_progress=on_asr_progress,
+            hb_thread = None
+            if backend == "mlx":
+                hb_thread = threading.Thread(target=mlx_heartbeat, daemon=True)
+                hb_thread.start()
+
+            try:
+                asr_result = run_transcription(
+                    wav_path,
+                    model_id=asr_model,
+                    prompt=meta.get("prompt", "") or settings.default_prompt,
+                    total_duration=duration,
+                    on_progress=on_asr_progress,
+                )
+            finally:
+                stop_heartbeat.set()
+                if hb_thread:
+                    hb_thread.join(timeout=1.0)
+
+            (job_dir / "asr_raw.json").write_text(
+                json.dumps(asr_result, ensure_ascii=False), encoding="utf-8"
             )
-        finally:
-            stop_heartbeat.set()
-            if hb_thread:
-                hb_thread.join(timeout=1.0)
 
         self.store.update_meta(
             job_id,
@@ -244,6 +293,7 @@ class PipelineWorker:
             status="completed",
             stage="完成",
             progress=100,
+            rediarize_only=False,
             elapsed_sec=int(time.time() - t_start),
             eta_remaining_sec=0,
         )

@@ -3,6 +3,7 @@
 import json
 import platform
 import shutil
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
@@ -65,6 +66,7 @@ class RerunJobReq(BaseModel):
     num_speakers: int = -1
     enhance_audio: bool = True
     prompt: Optional[str] = None
+    rediarize_only: bool = False
 
 
 class SummarizeReq(BaseModel):
@@ -129,12 +131,17 @@ def create_app(
     start_worker: bool = True,
 ) -> FastAPI:
     """Create FastAPI instance with configurable paths for clean test isolation."""
-    app = FastAPI(title="Local Whisper Studio", version="0.3.0")
     store = JobStore(data_dir)
     worker = PipelineWorker(store, models_dir, settings_path=settings_path)
-    if start_worker:
-        worker.start()
-        recover_pending_jobs(store, worker)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        if start_worker:
+            worker.start()
+            recover_pending_jobs(store, worker)
+        yield
+
+    app = FastAPI(title="Local Whisper Studio", version="0.3.0", lifespan=lifespan)
 
     app.state.store = store
     app.state.worker = worker
@@ -237,16 +244,21 @@ def create_app(
         job = _get_job_or_404(job_id)
         settings = load_settings(settings_path)
         job_dir = store.get_job_dir(job_id)
+        if req.rediarize_only:
+            has_asr = (job_dir / "asr_raw.json").exists() or bool(job.get("segments"))
+            if not has_asr:
+                raise HTTPException(status_code=400, detail="尚無已轉錄的逐字稿，請先執行完整轉錄。")
         # Remove stale generated caches so rerun produces clean, non-bloated output
         (job_dir / "waveform.json").unlink(missing_ok=True)
         (job_dir / "audio_16k_enhanced.wav").unlink(missing_ok=True)
         updated = store.update_meta(
             job_id,
             status="queued",
-            stage="排隊等待重新辨識...",
+            stage="排隊等待僅重跑聲紋對齊..." if req.rediarize_only else "排隊等待重新辨識...",
             progress=0,
             error=None,
             speakers={},
+            rediarize_only=req.rediarize_only,
             asr_model=req.asr_model,
             diarization_mode=req.diarization_mode,
             num_speakers_hint=req.num_speakers,

@@ -53,6 +53,70 @@ def _run_pyannote_31(
     return segments
 
 
+def consolidate_micro_speakers(
+    segments: list[dict],
+    max_auto_speakers: int = 12,
+    min_ratio: float = 0.008,
+    min_sec: float = 3.5,
+) -> list[dict]:
+    """Fold tiny noise/echo micro-clusters back into nearest main speakers when auto-detecting."""
+    if not segments:
+        return []
+
+    durations: dict[str, float] = {}
+    for seg in segments:
+        dur = max(0.0, float(seg["end"]) - float(seg["start"]))
+        spk = seg["speaker"]
+        durations[spk] = durations.get(spk, 0.0) + dur
+
+    total_talk = sum(durations.values())
+    if len(durations) <= 4 or total_talk <= 0:
+        return segments
+
+    threshold_sec = max(min_sec, total_talk * min_ratio)
+    ranked = sorted(durations.items(), key=lambda item: item[1], reverse=True)
+    kept = [spk for spk, dur in ranked if dur >= threshold_sec][:max_auto_speakers]
+    if len(kept) < min(2, len(ranked)):
+        kept = [spk for spk, _ in ranked[: min(2, len(ranked))]]
+    kept_set = set(kept)
+
+    if len(kept_set) == len(durations):
+        return segments
+
+    kept_segs = [s for s in segments if s["speaker"] in kept_set]
+    remapped: list[dict] = []
+    for seg in segments:
+        if seg["speaker"] in kept_set:
+            remapped.append(dict(seg))
+            continue
+        mid = 0.5 * (float(seg["start"]) + float(seg["end"]))
+        nearest = min(
+            kept_segs,
+            key=lambda cand: abs(0.5 * (float(cand["start"]) + float(cand["end"])) - mid),
+        )
+        remapped.append({**seg, "speaker": nearest["speaker"]})
+
+    # Merge adjacent same-speaker spans with small gaps and renumber cleanly SPEAKER_00..N
+    merged: list[dict] = []
+    for seg in remapped:
+        if (
+            merged
+            and merged[-1]["speaker"] == seg["speaker"]
+            and float(seg["start"]) - float(merged[-1]["end"]) <= 0.4
+        ):
+            merged[-1]["end"] = max(float(merged[-1]["end"]), float(seg["end"]))
+        else:
+            merged.append(dict(seg))
+
+    id_map: dict[str, str] = {}
+    for seg in merged:
+        old = seg["speaker"]
+        if old not in id_map:
+            id_map[old] = f"SPEAKER_{len(id_map):02d}"
+        seg["speaker"] = id_map[old]
+    return merged
+
+
 def run_diarization(
     wav_path: Path,
     models_dir: Path,
@@ -127,4 +191,6 @@ def run_diarization(
                 "speaker": f"SPEAKER_{seg.speaker:02d}",
             }
         )
+    if num_speakers <= 0:
+        segments = consolidate_micro_speakers(segments)
     return segments

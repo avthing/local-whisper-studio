@@ -272,3 +272,75 @@ def test_recover_pending_jobs_on_startup(tmp_path):
     assert set(resumed) == {j_proc["job_id"], j_wait["job_id"]}
     assert j_done["job_id"] not in resumed
     assert enqueued == resumed
+
+
+def test_rediarize_only_rerun_and_worker_reuse(tmp_path, monkeypatch):
+    """Re-diarize-only mode requires prior transcript and skips ASR during worker processing."""
+    from app.config import SETTINGS_FILE
+    from app.engine import worker as worker_mod
+
+    client, app = _make_client(tmp_path)
+    store = app.state.store
+    meta = store.create_job("重算聲紋測試", "meet.m4a")
+    jid = meta["job_id"]
+    job_dir = store.get_job_dir(jid)
+    (job_dir / "raw_audio.m4a").write_bytes(b"fake")
+
+    # Empty transcript cannot run rediarize_only
+    bad_res = client.post(f"/api/jobs/{jid}/rerun", json={"rediarize_only": True})
+    assert bad_res.status_code == 400
+
+    # Save an existing transcript (like an older completed job without asr_raw.json)
+    store.save_transcript(
+        jid,
+        [
+            {"start": 0.5, "end": 4.0, "speaker": "SPEAKER_99", "text": "第一段內容"},
+            {"start": 5.0, "end": 9.0, "speaker": "SPEAKER_88", "text": "第二段內容"},
+        ],
+        {"SPEAKER_99": "SPEAKER_99.wav"},
+    )
+    enqueued = []
+    monkeypatch.setattr(app.state.worker, "enqueue", lambda job_id: enqueued.append(job_id))
+    ok_res = client.post(
+        f"/api/jobs/{jid}/rerun",
+        json={"diarization_mode": "sherpa-accurate", "num_speakers": 2, "rediarize_only": True},
+    )
+    assert ok_res.status_code == 200
+    assert ok_res.json()["rediarize_only"] is True
+    assert enqueued == [jid]
+
+    # Run _process directly with mocked audio/diarizer, ensuring run_transcription is never called
+    wav_path = job_dir / "audio_16k.wav"
+    wav_path.write_bytes(b"wav")
+    m4a_path = job_dir / "audio_playable.m4a"
+    m4a_path.write_bytes(b"m4a")
+
+    monkeypatch.setattr(worker_mod, "prepare_audio_files", lambda *a, **k: (wav_path, m4a_path, 12.0))
+    monkeypatch.setattr(
+        worker_mod,
+        "run_diarization",
+        lambda *a, **k: [
+            {"start": 0.0, "end": 4.5, "speaker": "SPEAKER_00"},
+            {"start": 4.6, "end": 10.0, "speaker": "SPEAKER_01"},
+        ],
+    )
+    monkeypatch.setattr(
+        worker_mod,
+        "export_speaker_samples",
+        lambda *a, **k: {"SPEAKER_00": "SPEAKER_00.wav", "SPEAKER_01": "SPEAKER_01.wav"},
+    )
+    monkeypatch.setattr(worker_mod, "compute_waveform_peaks", lambda *a, **k: [0.5] * 10)
+    monkeypatch.setattr(
+        worker_mod,
+        "run_transcription",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("ASR must be skipped in rediarize_only")),
+    )
+
+    pw = worker_mod.PipelineWorker(store, tmp_path / "models", settings_path=tmp_path / "settings.json")
+    pw._process(jid)
+
+    final_job = store.get_job(jid)
+    assert final_job["status"] == "completed"
+    assert final_job["rediarize_only"] is False
+    assert [s["speaker"] for s in final_job["segments"]] == ["SPEAKER_00", "SPEAKER_01"]
+    assert "第一段內容" in final_job["segments"][0]["text"]

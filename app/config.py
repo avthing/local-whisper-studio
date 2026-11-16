@@ -67,9 +67,9 @@ DIARIZATION_MODES: dict[str, dict] = {
         "engine": "sherpa-onnx",
         "speed": "精準 (fp32)",
         "requires_token": False,
-        "threshold": 0.38,
+        "threshold": 0.52,
         "speed_mode": "accurate",
-        "pros": "免 Token 離線執行；調低聚類門檻 (0.38) 並搭配 0.6 秒斷句防黏合，有效避免輕聲說話者被大嗓門吸進同一組。",
+        "pros": "免 Token 離線執行；標準偏嚴門檻 (0.52) ＋ 雜訊碎片自動合併 ＋ 0.6 秒斷句防黏合，兼顧區分相近音色且不爆出幽靈語者。",
         "cons": "同一個人若忽遠忽近，偶爾會被拆成兩個子語者（可在介面用「合併語者」一鍵合回）。",
         "recommended_for": "3 人以上同性別男／女聲會議、遠場桌面收音。",
     },
@@ -79,9 +79,9 @@ DIARIZATION_MODES: dict[str, dict] = {
         "engine": "sherpa-onnx",
         "speed": "精準 (fp32)",
         "requires_token": False,
-        "threshold": 0.48,
+        "threshold": 0.58,
         "speed_mode": "accurate",
-        "pros": "免 Token 離線執行；標準門檻 (0.48) ＋ 0.6 秒斷句防黏合，同一人較不易被拆散。",
+        "pros": "免 Token 離線執行；均衡門檻 (0.58) ＋ 0.6 秒斷句防黏合，同一人最穩定不易被拆散。",
         "cons": "若兩人聲音低沉接近且遠離麥克風，偶爾仍會合併為同一人。",
         "recommended_for": "一般 2–4 人會議、雙人對談或訪談。",
     },
@@ -91,7 +91,7 @@ DIARIZATION_MODES: dict[str, dict] = {
         "engine": "sherpa-onnx",
         "speed": "快速（省約 40% 時間）",
         "requires_token": False,
-        "threshold": 0.50,
+        "threshold": 0.60,
         "speed_mode": "fast",
         "pros": "使用 int8 量化模型，CPU 負載低、處理速度快。",
         "cons": "量化損失些微細緻度，1 秒內的快速插話較容易切不出來。",
@@ -118,8 +118,8 @@ DEFAULT_FASTER_WHISPER_MODEL = ASR_MODELS["whisper-large-v3-turbo"]["faster_repo
 DEFAULT_WHISPER_MODEL = DEFAULT_MLX_WHISPER_MODEL
 
 ASR_RTF = {
-    "breeze-asr-25": 0.22,
-    "whisper-large-v3": 0.30,
+    "breeze-asr-25": 0.48,
+    "whisper-large-v3": 0.45,
     "whisper-large-v3-turbo": 0.16,
 }
 
@@ -202,13 +202,13 @@ def recommend_pipeline(
                 reasons.append("已設定 HF Token，啟用原生 Pyannote 3.1 專治多人遠場與搶話")
             else:
                 diar_mode = "sherpa-strict"
-                reasons.append("尚未設定 HF Token，改用免 Token 的「高敏銳聲紋分離 (0.38)」")
+                reasons.append("尚未設定 HF Token，改用免 Token 的「高敏銳聲紋分離 (0.52)」")
         elif priority == "speed":
             diar_mode = "sherpa-fast"
             reasons.append("多人會議但優先求快，啟用 int8 快速聲紋分離")
         else:
             diar_mode = "sherpa-strict"
-            reasons.append("3 人以上遠場會議室收音，啟用「遠場降噪動態均衡」拉平小聲與會者，並用「高敏銳分離 (0.38) + 自動人數」防雜訊搶名額與黏合")
+            reasons.append("3 人以上遠場會議室收音，啟用「遠場降噪動態均衡」拉平小聲與會者，並用「高敏銳分離 (0.52) + 自動人數」防雜訊搶名額與黏合")
 
     est = estimate_processing_seconds(duration_sec, asr_model, diar_mode, backend=backend)
     return {
