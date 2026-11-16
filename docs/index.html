@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Local Whisper Studio — 跨平台離線會議轉錄、聲紋分離與 AI 紀要工作台</title>
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --bg-elevated: #111827;
+      --bg-card: rgba(17, 24, 39, 0.78);
+      --border: rgba(255, 255, 255, 0.1);
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --accent: #6366f1;
+      --accent-2: #e11d48;
+      --accent-soft: rgba(99, 102, 241, 0.14);
+      --sky: #38bdf8;
+      --emerald: #34d399;
+      --rose: #fb7185;
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    }
+    html[data-theme="light"] {
+      --bg: #f8fafc;
+      --bg-elevated: #ffffff;
+      --bg-card: rgba(255, 255, 255, 0.9);
+      --border: rgba(15, 23, 42, 0.1);
+      --text: #0f172a;
+      --text-muted: #475569;
+      --accent: #4f46e5;
+      --accent-2: #e11d48;
+      --accent-soft: rgba(79, 70, 229, 0.08);
+      --shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "Noto Sans TC", sans-serif;
+      background:
+        radial-gradient(900px 500px at 15% -10%, rgba(99, 102, 241, 0.22), transparent 60%),
+        radial-gradient(700px 420px at 90% 10%, rgba(225, 29, 72, 0.16), transparent 60%),
+        var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+    }
+    a { color: inherit; text-decoration: none; }
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+    /* Nav */
+    header {
+      position: sticky; top: 0; z-index: 20;
+      backdrop-filter: blur(14px);
+      background: color-mix(in srgb, var(--bg) 78%, transparent);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 64px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; letter-spacing: -0.02em; }
+    .brand img { width: 32px; height: 32px; border-radius: 8px; }
+    .nav-links { display: flex; align-items: center; gap: 20px; font-size: 14px; color: var(--text-muted); }
+    .nav-links a:hover { color: var(--text); }
+    .theme-btn {
+      border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text);
+      border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 13px;
+    }
+
+    /* Hero */
+    .hero { padding: 72px 0 48px; text-align: center; }
+    .hero-icon {
+      width: 92px; height: 92px; border-radius: 24px;
+      box-shadow: 0 18px 40px rgba(99, 102, 241, 0.35);
+      margin-bottom: 20px;
+    }
+    .pill-row { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+    .pill {
+      font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--bg-card); color: var(--text-muted);
+    }
+    .pill.accent { background: var(--accent-soft); color: #a5b4fc; border-color: rgba(99, 102, 241, 0.35); }
+    html[data-theme="light"] .pill.accent { color: #4338ca; }
+    h1 {
+      font-size: clamp(2rem, 4.4vw, 3.2rem);
+      line-height: 1.15; margin: 0 auto 16px; max-width: 780px;
+      letter-spacing: -0.03em;
+    }
+    .hero p {
+      max-width: 680px; margin: 0 auto 28px; color: var(--text-muted); font-size: 17px;
+    }
+    .cta-row { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 22px; border-radius: 12px; font-weight: 600; font-size: 15px;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+      cursor: pointer; border: 1px solid var(--border);
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #fff; border: none;
+    }
+    .btn-secondary { background: var(--bg-elevated); color: var(--text); }
+
+    /* Interactive App Window Mockup */
+    .mockup-wrap { margin: 44px auto 0; max-width: 980px; }
+    .mockup {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: 18px; overflow: hidden; box-shadow: var(--shadow); text-align: left;
+    }
+    .mockup-top {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 18px; border-bottom: 1px solid var(--border);
+      background: color-mix(in srgb, var(--bg) 55%, var(--bg-elevated));
+    }
+    .dots { display: flex; gap: 7px; }
+    .dots span { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+    .dots span:nth-child(1) { background: #ef4444; }
+    .dots span:nth-child(2) { background: #f59e0b; }
+    .dots span:nth-child(3) { background: #10b981; }
+    .mockup-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+    .tab-btn {
+      border: 1px solid var(--border); background: transparent; color: var(--text-muted);
+      padding: 5px 12px; border-radius: 8px; font-size: 12px; cursor: pointer;
+    }
+    .tab-btn.active { background: var(--accent-soft); color: var(--text); border-color: rgba(99,102,241,0.45); }
+    .mockup-body { padding: 20px; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .wave-bar {
+      display: grid; grid-template-columns: repeat(48, 1fr); gap: 3px; align-items: center;
+      height: 66px; padding: 10px 12px; border-radius: 12px;
+      background: color-mix(in srgb, var(--bg) 60%, var(--bg-elevated));
+      border: 1px solid var(--border); margin-bottom: 14px;
+    }
+    .wave-bar i { display: block; border-radius: 999px; background: var(--sky); }
+    .wave-bar i.spk2 { background: var(--rose); }
+    .wave-bar i.spk3 { background: var(--emerald); }
+
+    .transcript-sample { display: grid; gap: 10px; }
+    .seg {
+      display: grid; grid-template-columns: 74px 90px 1fr; gap: 12px; align-items: baseline;
+      padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--bg) 35%, var(--bg-elevated));
+      font-size: 14px;
+    }
+    .seg.highlight { border-color: rgba(99, 102, 241, 0.55); background: var(--accent-soft); }
+    .ts { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; color: var(--text-muted); }
+    .spk { font-weight: 600; font-size: 13px; }
+    .spk.c1 { color: var(--sky); }
+    .spk.c2 { color: var(--rose); }
+    .spk.c3 { color: var(--emerald); }
+
+    /* Sections */
+    section { padding: 56px 0; }
+    h2 { font-size: 1.75rem; margin: 0 0 8px; letter-spacing: -0.02em; }
+    .sub { color: var(--text-muted); margin: 0 0 28px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
+      padding: 22px; backdrop-filter: blur(10px);
+    }
+    .card h3 { margin: 0 0 8px; font-size: 1.08rem; }
+    .card p { margin: 0; color: var(--text-muted); font-size: 14px; }
+    .badge {
+      display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px;
+      border-radius: 6px; background: var(--accent-soft); color: #a5b4fc; margin-bottom: 10px;
+    }
+    html[data-theme="light"] .badge { color: #4338ca; }
+
+    .os-switch { display: flex; gap: 10px; margin-bottom: 16px; }
+    pre {
+      margin: 0; padding: 16px; border-radius: 12px; overflow-x: auto;
+      background: #060911; color: #e2e8f0; border: 1px solid var(--border);
+      font-size: 13px; line-height: 1.55;
+    }
+    .meta-list { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; font-size: 13px; color: var(--text-muted); }
+
+    footer {
+      border-top: 1px solid var(--border); padding: 28px 0 42px;
+      color: var(--text-muted); font-size: 13px; text-align: center;
+    }
+    @media (max-width: 680px) {
+      .seg { grid-template-columns: 1fr; gap: 4px; }
+      .nav-links a.hide-sm { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container nav">
+      <div class="brand">
+        <img src="./icon.svg" alt="Local Whisper Studio Icon" />
+        <span>Local Whisper Studio</span>
+      </div>
+      <div class="nav-links">
+        <a class="hide-sm" href="#features">核心功能</a>
+        <a class="hide-sm" href="#models">模型矩陣</a>
+        <a class="hide-sm" href="#quickstart">快速啟動</a>
+        <a href="https://github.com/avthing/local-whisper-studio" target="_blank" rel="noopener">GitHub</a>
+        <button id="theme-toggle" class="theme-btn" type="button">☀️ 淺色</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <img class="hero-icon" src="./icon.svg" alt="Local Whisper Studio App Icon" />
+      <div class="pill-row">
+        <span class="pill accent">v0.3.0 · 100% 本地離線語音處理</span>
+        <span class="pill">macOS Apple Silicon (MLX)</span>
+        <span class="pill">Windows (CUDA / CPU)</span>
+        <span class="pill">OpenRouter / Ollama / Claude / Gemini</span>
+      </div>
+      <h1>把長篇會議錄音，變成可聽、可修、直存 Obsidian 的紀要工作台</h1>
+      <p>
+        結合 Breeze-ASR-25 / Whisper 與 sherpa-onnx 聲紋語者分離，支援互動波形跳播、語者合併改名、
+        AI 多供應商摘要，以及一鍵寫入本機 Obsidian Vault。
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#quickstart">立即本機啟動</a>
+        <a class="btn btn-secondary" href="https://github.com/avthing/local-whisper-studio" target="_blank" rel="noopener">查看 GitHub 原始碼</a>
+      </div>
+
+      <div class="mockup-wrap">
+        <div class="mockup">
+          <div class="mockup-top">
+            <div class="dots"><span></span><span></span><span></span></div>
+            <div class="mockup-tabs">
+              <button class="tab-btn active" data-tab="tab-wave">波形對齊與點字跳播</button>
+              <button class="tab-btn" data-tab="tab-diar">智慧推薦與 ETA 進度</button>
+              <button class="tab-btn" data-tab="tab-ai">AI 摘要 ＋ 直存 Obsidian</button>
+            </div>
+          </div>
+          <div class="mockup-body">
+            <div id="tab-wave" class="tab-panel active">
+              <div class="wave-bar" id="mock-wave"></div>
+              <div class="transcript-sample">
+                <div class="seg highlight">
+                  <span class="ts">01:05</span>
+                  <span class="spk c1">Alice</span>
+                  <span>先對齊 API 欄位格式，前端這週可以把預估時間跟進度條一起補齊。</span>
+                </div>
+                <div class="seg">
+                  <span class="ts">01:14</span>
+                  <span class="spk c2">Bob</span>
+                  <span>沒問題，我補完 OpenRouter 跟本機 Ollama 模型偵測之後就直接跑測試。</span>
+                </div>
+                <div class="seg">
+                  <span class="ts">01:28</span>
+                  <span class="spk c3">Charlie</span>
+                  <span>完成後請用一鍵直存寫入 Obsidian 的會議資料夾，方便大家後續追蹤。</span>
+                </div>
+              </div>
+            </div>
+            <div id="tab-diar" class="tab-panel">
+              <div class="grid-2">
+                <div class="card">
+                  <span class="badge">情境引導推薦</span>
+                  <h3>不知道選哪個模型？回答 3 個問題即可</h3>
+                  <p>選擇「會議語系（台灣中英夾雜／純中文／英文多語）」、「收音人數與場景」及「優先順序」，系統自動配對 ASR 模型、聲紋門檻與是否開啟遠場降噪動態均衡。</p>
+                </div>
+                <div class="card">
+                  <span class="badge">即時預估與持久化進度</span>
+                  <h3>4 階段進度條＋剩餘時間（ETA）</h3>
+                  <p>轉錄任務在背景佇列執行，重新整理瀏覽器畫面會自動續接進度輪詢；就算伺服器重啟，未完成的任務也會在啟動時自動恢復排程。</p>
+                </div>
+              </div>
+            </div>
+            <div id="tab-ai" class="tab-panel">
+              <div class="grid-2">
+                <div class="card">
+                  <span class="badge">4 大 AI 供應商即時切換</span>
+                  <h3>OpenRouter / Ollama / Claude / Gemini</h3>
+                  <p>API Key 僅保存在本機 gitignored 設定檔，API 回應一律遮罩處理。支援免付費本機 Ollama（自動偵測 `/api/tags` 已下載模型），也能零費用一鍵複製完整 Prompt。</p>
+                </div>
+                <div class="card">
+                  <span class="badge">🟣 直存 Obsidian Vault</span>
+                  <h3>一鍵寫入 Markdown ＋ obsidian:// 開啟</h3>
+                  <p>內建路徑穿越防護（`is_relative_to`）與安全檔名過濾，按下「直存 Obsidian」直接輸出包含與會者統計表、時間軸對話與 AI 摘要的 `.md` 筆記。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features">
+      <h2>為什麼選擇本機工作台</h2>
+      <p class="sub">專注真正每天開會會用到的功能，不堆砌無用雜項。</p>
+      <div class="grid-3">
+        <div class="card">
+          <h3>雙平台硬體自動最佳化</h3>
+          <p>macOS Apple Silicon 自動啟用 <code>mlx-whisper</code> Metal GPU；Windows 自動切換 <code>faster-whisper</code>（支援 NVIDIA CUDA float16 或 CPU int8）。</p>
+        </div>
+        <div class="card">
+          <h3>遠場收音與 0.6s 防黏合</h3>
+          <p>內建 ffmpeg 降噪動態均衡拉平遠近音量，搭配 sherpa-onnx 聲紋分離（門檻 0.38 起）與詞級短間隙切割，多人會議不易整段黏給同一人。</p>
+        </div>
+        <div class="card">
+          <h3>台灣繁體與專有名詞詞庫</h3>
+          <p>整合 OpenCC <code>s2twp</code> 轉換台灣慣用語，加上自訂 Glossary 批次校對常見英文產品與技術名詞拼字。</p>
+        </div>
+        <div class="card">
+          <h3>6 秒試聽＋語者合併</h3>
+          <p>左側語者欄自動截取每人最長清晰片段試聽，可依語者篩選、批次改名、單句改派語者或一鍵合併重複拆出的分身。</p>
+        </div>
+        <div class="card">
+          <h3>瀏覽器直接錄音混音</h3>
+          <p>不需額外安裝虛擬音效卡，直接從瀏覽器擷取麥克風與線上會議分頁音訊。</p>
+        </div>
+        <div class="card">
+          <h3>重跑不留垃圾暫存</h3>
+          <p>同一筆會議修改模型重跑時，自動清理暫存增強 WAV 並原地更新結果，硬碟空間不膨脹。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="models">
+      <h2>精選 3 款常用 ASR 模型矩陣</h2>
+      <p class="sub">根據台灣職場與跨國會議實戰挑選，不塞數十個冷門選項造成選擇困難。</p>
+      <div class="grid-3">
+        <div class="card">
+          <span class="badge">預設推薦 · ★★★★★</span>
+          <h3>Breeze-ASR-25（聯發科）</h3>
+          <p>台灣華語與中英夾雜首選，標點自然、英文縮寫辨識表現突出。</p>
+          <ul class="meta-list">
+            <li>MLX：<code>schsu/breeze-asr-25-mlx</code></li>
+            <li>Windows：<code>c1ayvveng/Breeze-ASR-25-faster-whisper</code></li>
+            <li>70 分鐘預估：約 10–14 分鐘</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="badge">跨語種滿血 · ★★★★☆</span>
+          <h3>Whisper Large-v3</h3>
+          <p>完整 32 層解碼器，適合全英文、日韓語或收音品質較差的長難句會議。</p>
+          <ul class="meta-list">
+            <li>MLX：<code>mlx-community/whisper-large-v3-mlx</code></li>
+            <li>Windows：<code>Systran/faster-whisper-large-v3</code></li>
+            <li>70 分鐘預估：約 15–20 分鐘</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="badge">極速出稿 · ★★★☆☆</span>
+          <h3>Whisper Large-v3-Turbo</h3>
+          <p>精簡 4 層解碼器與 1.6 GB 體積，適合快速抓大綱或短錄音。</p>
+          <ul class="meta-list">
+            <li>MLX：<code>mlx-community/whisper-large-v3-turbo</code></li>
+            <li>Windows：<code>deepdml/faster-whisper-large-v3-turbo-ct2</code></li>
+            <li>70 分鐘預估：約 4–6 分鐘</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="quickstart">
+      <h2>快速在本機啟動</h2>
+      <p class="sub">前置需求：Python 3.11–3.13、<code>uv</code> 與 <code>ffmpeg</code>。</p>
+      <div class="os-switch">
+        <button class="tab-btn active" data-os="os-mac">macOS (Apple Silicon)</button>
+        <button class="tab-btn" data-os="os-win">Windows (CUDA / CPU)</button>
+      </div>
+      <div id="os-mac" class="tab-panel active">
+<pre><code>git clone https://github.com/avthing/local-whisper-studio.git
+cd local-whisper-studio
+brew install ffmpeg uv
+./start.command
+# 瀏覽器自動開啟 http://127.0.0.1:8765</code></pre>
+      </div>
+      <div id="os-win" class="tab-panel">
+<pre><code>git clone https://github.com/avthing/local-whisper-studio.git
+cd local-whisper-studio
+winget install Gyan.FFmpeg astral-sh.uv
+start.bat
+:: 瀏覽器自動開啟 http://127.0.0.1:8765</code></pre>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      Local Whisper Studio · Built for offline meeting transcription &amp; Obsidian workflows ·
+      <a href="https://github.com/avthing/local-whisper-studio" target="_blank" rel="noopener">github.com/avthing/local-whisper-studio</a>
+    </div>
+  </footer>
+
+  <script>
+    const root = document.documentElement;
+    const toggle = document.getElementById("theme-toggle");
+    toggle.addEventListener("click", () => {
+      const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      toggle.textContent = next === "dark" ? "☀️ 淺色" : "🌙 深色";
+    });
+
+    // Generate deterministic acoustic waveform bars in mockup
+    const wave = document.getElementById("mock-wave");
+    const heights = [22, 34, 48, 28, 54, 42, 18, 60, 44, 30, 50, 38, 24, 58, 46, 32,
+      20, 40, 56, 36, 26, 48, 62, 44, 28, 34, 52, 40, 22, 58, 46, 30,
+      36, 54, 42, 26, 50, 38, 20, 46, 60, 34, 28, 52, 40, 24, 38, 26];
+    heights.forEach((h, i) => {
+      const bar = document.createElement("i");
+      bar.style.height = h + "%";
+      if (i >= 16 && i < 32) bar.className = "spk2";
+      else if (i >= 32) bar.className = "spk3";
+      wave.appendChild(bar);
+    });
+
+    document.querySelectorAll("[data-tab]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-tab]").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        ["tab-wave", "tab-diar", "tab-ai"].forEach((id) => {
+          document.getElementById(id).classList.toggle("active", id === btn.dataset.tab);
+        });
+      });
+    });
+
+    document.querySelectorAll("[data-os]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-os]").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        ["os-mac", "os-win"].forEach((id) => {
+          document.getElementById(id).classList.toggle("active", id === btn.dataset.os);
+        });
+      });
+    });
+  </script>
+</body>
+</html>

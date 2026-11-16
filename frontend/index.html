@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Local Whisper Studio</title>
+  <link rel="icon" type="image/svg+xml" href="/static/icon.svg" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Left Frosted Sidebar -->
+    <aside class="sidebar">
+      <div class="brand-row">
+        <div class="brand">
+          <img src="/static/icon.svg" class="brand-icon-img" alt="Local Whisper Studio" />
+          <div class="brand-text">
+            <span class="brand-name">Whisper Studio</span>
+            <span class="brand-badge">Local Pro</span>
+          </div>
+        </div>
+        <div class="brand-tools">
+          <button id="btn-theme" class="icon-btn" title="切換淺色／深色外觀">🌙</button>
+          <button id="btn-open-settings" class="icon-btn" title="設定">⚙️</button>
+        </div>
+      </div>
+
+      <!-- MacWhisper-style Action Pills -->
+      <div id="dropzone" class="dropzone">
+        <input id="file-input" type="file" accept=".qta,.m4a,.mp3,.wav,.mp4,.webm,.ogg" hidden />
+        <div class="drop-icon-circle">＋</div>
+        <div class="drop-title">匯入音訊檔案</div>
+        <div class="drop-sub">拖曳 .qta / .m4a / .mp3 / .wav 到這裡</div>
+        <div class="drop-preset-summary" id="preset-summary">Breeze-ASR-25 ・ 高敏銳分離</div>
+        <button id="btn-open-pipeline-cfg" type="button" class="btn btn-xs btn-ghost" style="margin-top:6px;">🎛️ 選擇模型與辨別方式</button>
+      </div>
+
+      <!-- Live Recorder Card -->
+      <div class="recorder-card">
+        <div class="rec-header">
+          <span class="rec-title"><span class="rec-dot"></span> 即時錄音</span>
+          <span id="rec-timer" class="rec-timer">00:00</span>
+        </div>
+        <select id="rec-mode" class="rec-select">
+          <option value="mic">僅麥克風</option>
+          <option value="mix">麥克風 + Meet/Teams 分頁聲音</option>
+        </select>
+        <div class="rec-meter-wrap"><div id="rec-meter" class="rec-meter"></div></div>
+        <div class="rec-actions">
+          <button id="btn-rec-start" class="btn btn-record">開始錄音</button>
+          <button id="btn-rec-stop" class="btn btn-primary" disabled>停止並轉錄</button>
+        </div>
+      </div>
+
+      <div class="section-label">轉錄紀錄</div>
+      <div id="job-list" class="job-list"></div>
+    </aside>
+
+    <!-- Main MacWhisper Workspace -->
+    <main class="main-area">
+      <!-- Top Toolbar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1 id="job-title">選擇或匯入會議錄音</h1>
+          <span id="job-meta" class="job-meta"></span>
+        </div>
+        <div class="topbar-actions" id="topbar-actions" style="display:none;">
+          <div class="search-wrap">
+            <span class="search-icon">🔍</span>
+            <input id="search-input" class="search-input" type="search" placeholder="搜尋逐字稿..." />
+          </div>
+          <label class="toggle-chip" title="播放時自動跟隨捲動">
+            <input type="checkbox" id="chk-autoscroll" checked />
+            <span>自動捲動</span>
+          </label>
+          <div class="segmented-export">
+            <button class="seg-btn" data-export="md">下載 .md</button>
+            <button class="seg-btn" data-export="srt">.srt</button>
+            <button class="seg-btn" data-export="txt">.txt</button>
+          </div>
+          <button id="btn-save-obsidian" class="btn btn-ghost" title="直接寫入你的 Obsidian Vault">🟣 直存 Obsidian</button>
+          <button id="btn-rerun-job" class="btn btn-ghost" title="更換模型或辨別方式重新處理">🔄 換模型重跑</button>
+          <button id="btn-toggle-ai" class="btn btn-ai">✨ 會議整理</button>
+        </div>
+      </header>
+
+      <!-- Processing Progress -->
+      <div id="progress-banner" class="progress-banner" style="display:none;">
+        <div class="progress-info">
+          <span id="progress-stage">處理中...</span>
+          <span id="progress-eta" class="progress-eta"></span>
+          <span id="progress-pct" class="progress-pct">0%</span>
+        </div>
+        <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+        <div class="progress-steps" id="progress-steps">
+          <span data-step="1">1. 音訊增強</span>
+          <span data-step="2">2. 聲紋分離</span>
+          <span data-step="3">3. 語音轉錄</span>
+          <span data-step="4">4. 對齊清洗</span>
+        </div>
+      </div>
+
+      <!-- MacWhisper Signature Top Waveform Player -->
+      <section id="waveform-bar" class="waveform-bar" style="display:none;">
+        <div class="player-controls-left">
+          <button id="btn-skip-back" class="ctrl-btn" title="倒退 5 秒">↺ 5s</button>
+          <button id="btn-play-pause" class="play-btn" title="播放／暫停">▶</button>
+          <button id="btn-skip-fwd" class="ctrl-btn" title="快進 5 秒">5s ↻</button>
+        </div>
+        <div class="waveform-wrap">
+          <canvas id="waveform-canvas" class="waveform-canvas"></canvas>
+          <div id="speaker-ribbon" class="speaker-ribbon"></div>
+        </div>
+        <div class="player-controls-right">
+          <span id="player-current" class="time-label">00:00</span>
+          <span class="time-sep">/</span>
+          <span id="player-duration" class="time-label">00:00</span>
+          <select id="player-speed" class="speed-select">
+            <option value="1">1.0x</option>
+            <option value="1.25">1.25x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2">2.0x</option>
+          </select>
+        </div>
+        <audio id="main-audio" preload="metadata"></audio>
+        <audio id="sample-audio"></audio>
+      </section>
+
+      <!-- Workspace Content -->
+      <div class="workspace-body" id="workspace-body" style="display:none;">
+        <!-- Speaker Management Rail -->
+        <section class="speaker-panel">
+          <div class="panel-header">
+            <span>語者辨識 (Speakers)</span>
+            <button id="btn-save-speakers" class="btn btn-xs btn-primary">套用改名</button>
+          </div>
+          <div id="speaker-list" class="speaker-list"></div>
+        </section>
+
+        <!-- Main Transcript Stream -->
+        <section class="transcript-panel">
+          <div id="filter-pills" class="filter-pills"></div>
+          <div id="transcript-list" class="transcript-list"></div>
+        </section>
+      </div>
+
+      <!-- Empty State -->
+      <div id="empty-state" class="empty-state">
+        <div class="empty-badge">Apple Silicon ・ Windows Cross-Platform</div>
+        <h2>像 MacWhisper Pro 一樣整理你的每一場會議</h2>
+        <p>離線聲紋分離（免 HF Token）、即時波形跳轉、語者試聽合併、一鍵匯出 Obsidian 會議紀要。</p>
+      </div>
+    </main>
+
+    <!-- Right AI Meeting Notes Drawer -->
+    <aside id="ai-drawer" class="ai-drawer" style="display:none;">
+      <div class="panel-header">
+        <span>✨ 會議記錄整理</span>
+        <button id="btn-close-ai" class="icon-btn">✕</button>
+      </div>
+      <div class="ai-controls">
+        <label>AI 引擎
+          <select id="summary-provider">
+            <option value="openrouter">OpenRouter (多模型萬用)</option>
+            <option value="ollama">本機 Ollama（完全離線）</option>
+            <option value="claude">Anthropic Claude API</option>
+            <option value="gemini">Google Gemini API</option>
+          </select>
+        </label>
+        <label>整理模板
+          <select id="summary-template">
+            <option value="standard">標準會議紀要（重點・決策・待辦）</option>
+            <option value="obsidian">Obsidian 每日會議格式</option>
+            <option value="defense">職場防禦・發言立場與風險盤點</option>
+          </select>
+        </label>
+        <label>自訂提示（選填）
+          <textarea id="summary-custom-prompt" rows="2" placeholder="留空則套用上方模板..."></textarea>
+        </label>
+        <div class="ai-btn-row">
+          <button id="btn-copy-prompt" class="btn btn-ghost">📋 複製 Prompt</button>
+          <button id="btn-run-summary" class="btn btn-primary">⚡ AI 生成整理</button>
+        </div>
+      </div>
+      <div class="ai-output-wrap">
+        <div class="ai-output-head">
+          <span>整理結果（可編輯保存）</span>
+          <button id="btn-save-summary" class="btn btn-xs btn-ghost">儲存</button>
+        </div>
+        <textarea id="summary-output" class="summary-output" placeholder="尚未生成會議整理。可點上方「AI 生成整理」或複製 Prompt 貼給外部 AI..."></textarea>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Inline Speaker Reassign Popover -->
+  <div id="spk-popover" class="spk-popover" style="display:none;"></div>
+
+  <!-- Pipeline / Smart Recommender + Manual Selector Modal -->
+  <div id="pipeline-modal" class="modal-backdrop" style="display:none;">
+    <div class="modal-card modal-wide">
+      <div class="panel-header">
+        <span id="pipeline-modal-title">🎛️ 選擇語音模型與語者辨別方式</span>
+        <button id="btn-close-pipeline" class="icon-btn">✕</button>
+      </div>
+      <div class="modal-tabs">
+        <button type="button" class="tab-btn active" data-tab="wizard">🧭 智慧情境推薦（幫我選）</button>
+        <button type="button" class="tab-btn" data-tab="manual">⚙️ 專家自訂（看優缺點手動挑）</button>
+      </div>
+
+      <!-- Tab 1: Guided Smart Recommender -->
+      <div id="tab-wizard" class="modal-body">
+        <div class="grid-2">
+          <label>1. 這場會議主要語系？
+            <select id="wiz-lang">
+              <option value="zh-tw-mix" selected>台灣中文＋英文專有名詞混講</option>
+              <option value="zh-pure">純中文對話（少英文縮寫）</option>
+              <option value="en-multi">全英文／日韓等多國語言</option>
+            </select>
+          </label>
+          <label>2. 與會人數與收音狀況？
+            <select id="wiz-scenario">
+              <option value="multi-far" selected>3 人以上會議室（遠近不一／含同性別）</option>
+              <option value="two-near">2 人近距離對談／訪談</option>
+              <option value="solo">單人獨白（不需分語者）</option>
+            </select>
+          </label>
+        </div>
+        <div class="grid-2">
+          <label>3. 本次最在意什麼？
+            <select id="wiz-priority">
+              <option value="accuracy" selected>高準確率優先（重要會議／留存證據）</option>
+              <option value="speed">速度優先（急著先抓大意）</option>
+              <option value="pyannote">最高防搶話精度（已設 HF Token 用 Pyannote 3.1）</option>
+            </select>
+          </label>
+          <label>4. 音檔大致長度（計算預估時間用）
+            <select id="wiz-duration">
+              <option value="900">15 分鐘以內</option>
+              <option value="2700">30 – 45 分鐘</option>
+              <option value="4200" selected>60 – 75 分鐘（大型週會）</option>
+              <option value="5400">90 分鐘以上</option>
+            </select>
+          </label>
+        </div>
+        <div id="wiz-result-card" class="recommend-card"></div>
+      </div>
+
+      <!-- Tab 2: Manual Custom + Live ETA -->
+      <div id="tab-manual" class="modal-body" style="display:none;">
+        <label>1. 語音辨識模型 (ASR Model)
+          <select id="cfg-asr-model"></select>
+        </label>
+        <div id="asr-info-box" class="model-info-box"></div>
+
+        <label>2. 語者辨別方式 (Diarization Mode)
+          <select id="cfg-diar-mode"></select>
+        </label>
+        <div id="diar-info-box" class="model-info-box"></div>
+
+        <div class="grid-2">
+          <label>預期與會人數
+            <select id="cfg-num-speakers">
+              <option value="-1" selected>自動偵測（推薦・防雜訊搶名額）</option>
+              <option value="1">1 人</option>
+              <option value="2">2 人</option>
+              <option value="3">3 人</option>
+              <option value="4">4 人</option>
+              <option value="5">5 人</option>
+              <option value="6">6 人</option>
+              <option value="8">8 人</option>
+            </select>
+          </label>
+          <label class="checkbox-box">
+            <span>音訊前處理</span>
+            <span class="checkbox-row">
+              <input type="checkbox" id="cfg-enhance-audio" checked />
+              <span>遠場降噪＋動態拉平大小聲</span>
+            </span>
+          </label>
+        </div>
+        <label>會議熱詞提示 (Initial Prompt)
+          <textarea id="cfg-prompt" rows="2"></textarea>
+        </label>
+        <div id="manual-eta-box" class="eta-banner"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btn-apply-pipeline" class="btn btn-primary">確認套用</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal-backdrop" style="display:none;">
+    <div class="modal-card">
+      <div class="panel-header">
+        <span>⚙️ AI 整理與轉錄設定</span>
+        <button id="btn-close-settings" class="icon-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <label>預設 AI 引擎
+          <select id="set-provider">
+            <option value="openrouter">OpenRouter（萬用路由：Claude/Gemini/DeepSeek）</option>
+            <option value="ollama">本機 Ollama（完全離線保密）</option>
+            <option value="claude">Anthropic Claude API</option>
+            <option value="gemini">Google Gemini API</option>
+          </select>
+        </label>
+        <div class="grid-2">
+          <label>OpenRouter API Key <input id="set-openrouter-key" type="password" placeholder="留空維持原設定" /></label>
+          <label>OpenRouter Model <input id="set-openrouter-model" type="text" placeholder="google/gemini-2.5-flash" /></label>
+        </div>
+        <div class="grid-2">
+          <label>Ollama URL <input id="set-ollama-url" type="text" /></label>
+          <label>Ollama Model
+            <span style="display:flex;gap:4px;">
+              <input id="set-ollama-model" type="text" style="flex:1;min-width:0;" />
+              <button id="btn-detect-ollama" type="button" class="btn btn-xs btn-ghost" title="偵測本機已安裝 Ollama 模型">🔍</button>
+            </span>
+          </label>
+        </div>
+        <div id="ollama-detected" style="font-size:11.5px;color:var(--muted);"></div>
+        <div class="grid-2">
+          <label>Claude API Key <input id="set-claude-key" type="password" placeholder="留空維持原設定" /></label>
+          <label>Claude Model <input id="set-claude-model" type="text" /></label>
+        </div>
+        <div class="grid-2">
+          <label>Gemini API Key <input id="set-gemini-key" type="password" placeholder="留空維持原設定" /></label>
+          <label>Gemini Model <input id="set-gemini-model" type="text" /></label>
+        </div>
+        <div class="grid-2">
+          <label>Obsidian Vault 路徑 <input id="set-obsidian-vault" type="text" placeholder="/Users/you/Documents/ObsidianVault" /></label>
+          <label>預設存入資料夾 <input id="set-obsidian-sub" type="text" placeholder="20_Areas/工作/會議" /></label>
+        </div>
+        <label>Hugging Face Token（僅使用 Pyannote 3.1 原生旗艦版才需要）
+          <input id="set-hf-token" type="password" placeholder="留空維持原設定" />
+        </label>
+        <label>預設 Whisper 熱詞 Prompt
+          <textarea id="set-prompt" rows="2"></textarea>
+        </label>
+        <label>專有名詞自動修正字典（每行一組「錯字=正字」，轉錄完成後自動替換）
+          <textarea id="set-glossary" rows="4" placeholder="Berry=Barry&#10;Selfforce=Salesforce&#10;Net3=NetSuite"></textarea>
+        </label>
+        <div id="settings-status" class="settings-status"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-save-settings" class="btn btn-primary">儲存設定</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local data, recordings, transcripts, and API keys (NEVER commit)
+data/
+models/
+*.wav
+*.m4a
+*.qta
+*.mp3
+*.webm
+*.mp4
+settings.json
+.env
+
+# macOS
+.DS_Store

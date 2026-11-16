@@ -1,0 +1,28 @@
+[project]
+name = "local-whisper-studio"
+version = "0.3.0"
+description = "Cross-platform (macOS & Windows) offline meeting transcription, speaker diarization, and AI summary studio."
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.18",
+    "httpx>=0.28.0",
+    "mlx-whisper>=0.4.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "faster-whisper>=1.1.0; sys_platform != 'darwin' or platform_machine != 'arm64'",
+    "sherpa-onnx>=2.0.1",
+    "opencc-python-reimplemented>=0.1.7",
+    "soundfile>=0.13.0",
+    "numpy>=2.0.0",
+    "pydantic>=2.10.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-cov>=6.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
